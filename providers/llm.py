@@ -71,6 +71,108 @@ class GeminiLLM(LLMProvider):
 
 
 # --------------------------------------------------------------------------- #
+# Hosted: MODELS.md catalog providers (real per-run model routing)
+# --------------------------------------------------------------------------- #
+class OpenAICompatibleLLM(LLMProvider):
+    """OpenAI-compatible chat-completions API (covers OpenAI and xAI)."""
+
+    def __init__(self, settings: Settings, *, base_url: str, api_key: str, model: str, name: str):
+        self.settings = settings
+        self.base_url = base_url.rstrip("/")
+        self.api_key = api_key
+        self.model = model
+        self.name = name
+
+    async def complete(
+        self,
+        system: str,
+        messages: Sequence[ChatMessage],
+        *,
+        temperature: float = 0.6,
+        max_tokens: int | None = None,
+    ) -> str:
+        payload_msgs = [{"role": "system", "content": system}]
+        for m in messages:
+            payload_msgs.append(
+                {"role": "assistant" if m.role == "assistant" else "user", "content": m.content}
+            )
+        body = {"model": self.model, "messages": payload_msgs, "temperature": temperature}
+        if max_tokens:
+            body["max_tokens"] = max_tokens
+        async with httpx.AsyncClient(timeout=60) as client:
+            resp = await client.post(
+                f"{self.base_url}/chat/completions",
+                headers={"Authorization": f"Bearer {self.api_key}"},
+                json=body,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+        return data["choices"][0]["message"]["content"].strip()
+
+
+class AnthropicLLM(LLMProvider):
+    """Anthropic-native Messages API."""
+
+    name = "anthropic"
+
+    def __init__(self, settings: Settings, *, api_key: str, model: str):
+        self.settings = settings
+        self.api_key = api_key
+        self.model = model
+
+    async def complete(
+        self,
+        system: str,
+        messages: Sequence[ChatMessage],
+        *,
+        temperature: float = 0.6,
+        max_tokens: int | None = None,
+    ) -> str:
+        payload_msgs = [
+            {"role": "assistant" if m.role == "assistant" else "user", "content": m.content}
+            for m in messages
+        ] or [{"role": "user", "content": "Begin."}]
+        body = {
+            "model": self.model,
+            "max_tokens": max_tokens or 1024,
+            "system": system,
+            "messages": payload_msgs,
+            "temperature": temperature,
+        }
+        async with httpx.AsyncClient(timeout=60) as client:
+            resp = await client.post(
+                "https://api.anthropic.com/v1/messages",
+                headers={
+                    "x-api-key": self.api_key,
+                    "anthropic-version": "2023-06-01",
+                    "content-type": "application/json",
+                },
+                json=body,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+        return data["content"][0]["text"].strip()
+
+
+def build_catalog_llm(info, settings: Settings) -> LLMProvider:
+    """Instantiate the real client for a resolved catalog model (info from
+    providers.catalog.ModelInfo). Used only when LLM_PROVIDER=catalog."""
+    from providers import catalog
+
+    p = catalog.providers()[info.provider]
+    api_key = getattr(settings, p["key_env"].lower(), "") or ""
+    if p.get("api") == "anthropic-native":
+        return AnthropicLLM(settings, api_key=api_key, model=info.model)
+    return OpenAICompatibleLLM(
+        settings,
+        base_url=p["base_url"],
+        api_key=api_key,
+        model=info.model,
+        name=info.provider,
+    )
+
+
+# --------------------------------------------------------------------------- #
 # Offline: deterministic stub engine
 # --------------------------------------------------------------------------- #
 _NUM = r"\d[\d,\.]*"

@@ -29,7 +29,24 @@ def _context_from_persona(persona: dict) -> str:
     return f"{role}. {scope}. Detected tech: {skills}".strip()
 
 
-async def run_simulation(req: SimulateRequest, llm: LLMProvider) -> SimulateResponse:
+async def run_simulation(
+    req: SimulateRequest,
+    llm: LLMProvider | None = None,
+    *,
+    convo_llm: LLMProvider | None = None,
+    extract_llm: LLMProvider | None = None,
+    cost: Optional[dict] = None,
+) -> SimulateResponse:
+    """Run the interviewer↔candidate simulation then extract.
+
+    ``convo_llm`` drives the interviewer + candidate + persona; ``extract_llm``
+    drives extraction. Both default to ``llm`` for the legacy single-LLM call.
+    Pass an already-built ``cost`` block to attach it to the response."""
+    convo = convo_llm or llm
+    extract = extract_llm or llm
+    if convo is None or extract is None:
+        raise ValueError("run_simulation requires an llm (or convo_llm/extract_llm).")
+
     if not req.persona and not req.experience_context:
         raise ValueError("Provide either `experience_context` or `persona`.")
 
@@ -37,7 +54,7 @@ async def run_simulation(req: SimulateRequest, llm: LLMProvider) -> SimulateResp
     if req.persona:
         persona = req.persona
     else:
-        raw = await llm.complete(persona_generator_prompt(req.experience_context), [], temperature=0.4)
+        raw = await convo.complete(persona_generator_prompt(req.experience_context), [], temperature=0.4)
         persona = parse_llm_json(raw)
     ground_truth: Optional[dict] = persona.get("ground_truth") if isinstance(persona, dict) else None
 
@@ -51,23 +68,24 @@ async def run_simulation(req: SimulateRequest, llm: LLMProvider) -> SimulateResp
     candidate_msgs: list[ChatMessage] = []     # POV: assistant = candidate's answers
     ts = 0
     for _ in range(max(1, req.max_turns)):
-        question = await llm.complete(live_system, interviewer_msgs, temperature=0.5)
+        question = await convo.complete(live_system, interviewer_msgs, temperature=0.5)
         transcript.append(Turn(speaker="agent", text=question, ts=ts)); ts += 1
         interviewer_msgs.append(ChatMessage("assistant", question))
         candidate_msgs.append(ChatMessage("user", question))
         if any(m in question.lower() for m in _END_MARKERS):
             break
 
-        answer = await llm.complete(cand_system, candidate_msgs, temperature=0.7)
+        answer = await convo.complete(cand_system, candidate_msgs, temperature=0.7)
         transcript.append(Turn(speaker="user", text=answer, ts=ts)); ts += 1
         candidate_msgs.append(ChatMessage("assistant", answer))
         interviewer_msgs.append(ChatMessage("user", answer))
 
     # 3) extraction over the produced transcript
-    extraction = await run_extraction(transcript, llm)
+    extraction = await run_extraction(transcript, extract)
 
     return SimulateResponse(
         transcript=transcript,
         extraction=extraction,
         ground_truth=ground_truth,
+        cost=cost,
     )

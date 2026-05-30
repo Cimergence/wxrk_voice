@@ -24,6 +24,9 @@ class Session:
     candidate_name: Optional[str]
     room: str
     status: Literal["active", "ended"] = "active"
+    # resolved (provider, model) for each role, for cost/labeling at finalize
+    convo_choice: Optional[tuple[str, str]] = None
+    extract_choice: Optional[tuple[str, str]] = None
     turns: list[Turn] = field(default_factory=list)
     created_at: float = field(default_factory=time.time)
     _subscribers: set[asyncio.Queue] = field(default_factory=set)
@@ -38,6 +41,8 @@ class SessionStore:
         experience_id: str,
         experience_context: str,
         candidate_name: Optional[str] = None,
+        convo_choice: Optional[tuple[str, str]] = None,
+        extract_choice: Optional[tuple[str, str]] = None,
     ) -> Session:
         sid = f"sess_{secrets.token_hex(6)}"
         session = Session(
@@ -46,6 +51,8 @@ class SessionStore:
             experience_context=experience_context,
             candidate_name=candidate_name,
             room=f"voice-{sid}",
+            convo_choice=convo_choice,
+            extract_choice=extract_choice,
         )
         self._sessions[sid] = session
         return session
