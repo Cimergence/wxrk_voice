@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>WXRK Voice — Test Console</title>
+<script src="https://cdn.jsdelivr.net/npm/livekit-client@2/dist/livekit-client.umd.min.js"></script>
+<style>
+  :root{
+    --bg:#0b1020; --panel:#141a2e; --panel2:#1b2340; --line:#2a3357;
+    --agent:#7c5cff; --user:#1fb8a6; --text:#e7ecff; --muted:#8b95bd; --rec:#ff5470;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:'Segoe UI',system-ui,-apple-system,sans-serif;
+       background:radial-gradient(1200px 600px at 70% -10%,#1a2348,#0b1020);
+       color:var(--text);min-height:100vh}
+  header{display:flex;align-items:center;gap:14px;padding:18px 24px;border-bottom:1px solid var(--line)}
+  header h1{font-size:18px;margin:0;letter-spacing:.3px}
+  header .tag{font-size:12px;color:var(--muted);padding:3px 9px;border:1px solid var(--line);border-radius:999px}
+  .wrap{max-width:980px;margin:0 auto;padding:22px}
+  .controls{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:18px}
+  button{font:inherit;font-weight:600;cursor:pointer;border:none;border-radius:11px;
+          padding:12px 20px;color:#fff;transition:.15s transform,.15s opacity}
+  button:active{transform:translateY(1px)}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  .btn-start{background:linear-gradient(135deg,#7c5cff,#5a8bff)}
+  .btn-sim{background:linear-gradient(135deg,#1fb8a6,#1f8fb8)}
+  .btn-stop{background:#2a3357}
+  select{background:var(--panel2);color:var(--text);border:1px solid var(--line);
+          border-radius:10px;padding:11px 12px;font:inherit}
+  .rec{display:none;align-items:center;gap:8px;color:var(--rec);font-weight:600;font-size:14px}
+  .rec.on{display:inline-flex}
+  .dot{width:11px;height:11px;border-radius:50%;background:var(--rec);animation:pulse 1.1s infinite}
+  @keyframes pulse{0%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(.8)}100%{opacity:1;transform:scale(1)}}
+  .status{font-size:13px;color:var(--muted);min-height:18px;margin-bottom:14px}
+  .chat{background:var(--panel);border:1px solid var(--line);border-radius:16px;
+        padding:18px;min-height:380px;max-height:62vh;overflow-y:auto}
+  .row{display:flex;margin:12px 0}
+  .row.agent{justify-content:flex-start}
+  .row.user{justify-content:flex-end}
+  .bubble{max-width:74%;padding:11px 15px;border-radius:14px;line-height:1.45;font-size:15px}
+  .agent .bubble{background:var(--panel2);border:1px solid var(--line);border-bottom-left-radius:4px}
+  .user .bubble{background:linear-gradient(135deg,#176b62,#1fb8a6);border-bottom-right-radius:4px}
+  .who{font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin-bottom:4px}
+  .empty{color:var(--muted);text-align:center;padding:60px 0;font-size:14px}
+</style>
+</head>
+<body>
+<header>
+  <h1>🎙️ WXRK Voice — Test Console</h1>
+  <span class="tag">self-contained · no backend</span>
+  <span id="rec" class="rec"><span class="dot"></span>recording</span>
+</header>
+
+<div class="wrap">
+  <div class="controls">
+    <button id="startBtn" class="btn-start">▶ Start (mic)</button>
+    <button id="stopBtn" class="btn-stop" disabled>■ Stop</button>
+    <button id="simBtn" class="btn-sim">⚡ Simulate (no mic)</button>
+    <select id="difficulty" title="Simulation difficulty">
+      <option value="hard">hard candidate</option>
+      <option value="easy">easy candidate</option>
+    </select>
+  </div>
+  <div id="status" class="status">Ready. Start a live mic interview, or run a no-mic simulation.</div>
+  <div id="chat" class="chat"><div class="empty">No conversation yet.</div></div>
+</div>
+
+<script>
+const EXPERIENCE = "Senior Backend Engineer at Acme, 2021–2023. Built the payments service. Detected tech: Python, Postgres, Kafka, AWS.";
+const chat = document.getElementById('chat');
+const statusEl = document.getElementById('status');
+const recEl = document.getElementById('rec');
+const startBtn = document.getElementById('startBtn');
+const stopBtn = document.getElementById('stopBtn');
+const simBtn = document.getElementById('simBtn');
+let room = null, ws = null, cleared = false;
+
+function setStatus(t){ statusEl.textContent = t; }
+function clearChat(){ chat.innerHTML = ''; cleared = true; }
+function addTurn(speaker, text){
+  if(!cleared) clearChat();
+  const who = speaker === 'user' ? 'user' : 'agent';
+  const row = document.createElement('div');
+  row.className = 'row ' + who;
+  row.innerHTML = `<div class="bubble"><div class="who">${who === 'user' ? 'Candidate' : 'Mira'}</div>${escapeHtml(text)}</div>`;
+  chat.appendChild(row);
+  chat.scrollTop = chat.scrollHeight;
+}
+function escapeHtml(s){ return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+async function createSession(){
+  const r = await fetch('/sessions', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ experience_id:'exp_test', candidate_name:'Sara', experience_context: EXPERIENCE })
+  });
+  if(!r.ok) throw new Error('create session failed: ' + r.status);
+  return r.json();
+}
+
+function openStream(sessionId){
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  ws = new WebSocket(`${proto}://${location.host}/sessions/${sessionId}/stream`);
+  ws.onmessage = ev => {
+    const m = JSON.parse(ev.data);
+    if(m.type === 'turn') addTurn(m.speaker, m.text);
+    else if(m.type === 'end') setStatus('Session ended.');
+  };
+  ws.onerror = () => setStatus('Transcript stream error.');
+}
+
+startBtn.onclick = async () => {
+  startBtn.disabled = true; simBtn.disabled = true;
+  clearChat(); setStatus('Creating session…');
+  try{
+    const s = await createSession();
+    openStream(s.session_id);
+    setStatus('Connecting microphone…');
+    if(!s.ws_url || s.join_token.startsWith('dev-token')){
+      recEl.classList.add('on'); stopBtn.disabled = false;
+      setStatus('Session live (LiveKit creds not configured — mic transport disabled in dev). '
+        + 'Transcript stream is open; run a real LiveKit worker to converse, or use Simulate.');
+      return;
+    }
+    room = new LivekitClient.Room({ adaptiveStream:true });
+    await room.connect(s.ws_url, s.join_token);
+    await room.localParticipant.setMicrophoneEnabled(true);
+    recEl.classList.add('on'); stopBtn.disabled = false;
+    setStatus('Live — speak naturally. Mira will respond.');
+  }catch(e){
+    setStatus('Could not start: ' + e.message);
+    startBtn.disabled = false; simBtn.disabled = false;
+  }
+};
+
+stopBtn.onclick = async () => {
+  recEl.classList.remove('on');
+  stopBtn.disabled = true; startBtn.disabled = false; simBtn.disabled = false;
+  if(room){ await room.disconnect(); room = null; }
+  if(ws){ ws.close(); ws = null; }
+  setStatus('Stopped.');
+};
+
+simBtn.onclick = async () => {
+  startBtn.disabled = true; simBtn.disabled = true;
+  clearChat();
+  const difficulty = document.getElementById('difficulty').value;
+  setStatus(`Running ${difficulty} simulation (no mic)…`);
+  try{
+    const r = await fetch('/simulate', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ experience_context: EXPERIENCE, difficulty, max_turns:16 })
+    });
+    if(!r.ok) throw new Error('simulate failed: ' + r.status);
+    const data = await r.json();
+    for(const t of data.transcript){ addTurn(t.speaker, t.text); await sleep(140); }
+    const m = (data.extraction.metrics||[]).length, sk = (data.extraction.skills||[]).length;
+    setStatus(`Done — ${data.transcript.length} turns, extracted ${sk} skills and ${m} metrics. See console for full JSON.`);
+    console.log('extraction', data.extraction);
+    console.log('ground_truth', data.ground_truth);
+  }catch(e){
+    setStatus('Simulation error: ' + e.message);
+  }finally{
+    startBtn.disabled = false; simBtn.disabled = false;
+  }
+};
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+</script>
+</body>
+</html>
