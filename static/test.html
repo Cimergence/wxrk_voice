@@ -3,129 +3,280 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>WXRK Voice — Test Console</title>
+<title>WXRK Voice — Interview Console</title>
 <script src="https://cdn.jsdelivr.net/npm/livekit-client@2/dist/livekit-client.umd.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Syne:wght@600;700;800&display=swap" rel="stylesheet">
 <style>
-  :root{
-    --bg:#0b1020; --panel:#141a2e; --panel2:#1b2340; --line:#2a3357;
-    --agent:#7c5cff; --user:#1fb8a6; --text:#e7ecff; --muted:#8b95bd; --rec:#ff5470;
+  :root {
+    --bg:#141414; --bg2:#1A1A1A; --bg3:#222222; --bg4:#2A2A2A; --bg5:#303030;
+    --primary:#F25623; --primary-hover:#D94B1F;
+    --border:rgba(255,255,255,0.08); --border-strong:rgba(255,255,255,0.14);
+    --text:#F5F5F5; --muted:#9A9A9A; --faint:#5E5E5E;
+    --green:#22C55E; --amber:#F59E0B; --red:#EF4444; --blue:#3B82F6;
   }
-  *{box-sizing:border-box}
-  body{margin:0;font-family:'Segoe UI',system-ui,-apple-system,sans-serif;
-       background:radial-gradient(1200px 600px at 70% -10%,#1a2348,#0b1020);
-       color:var(--text);min-height:100vh}
-  header{display:flex;align-items:center;gap:14px;padding:18px 24px;border-bottom:1px solid var(--line)}
-  header h1{font-size:18px;margin:0;letter-spacing:.3px}
-  header .tag{font-size:12px;color:var(--muted);padding:3px 9px;border:1px solid var(--line);border-radius:999px}
-  .wrap{max-width:980px;margin:0 auto;padding:22px}
-  .controls{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:18px}
-  button{font:inherit;font-weight:600;cursor:pointer;border:none;border-radius:11px;
-          padding:12px 20px;color:#fff;transition:.15s transform,.15s opacity}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--text);
+       min-height:100vh;-webkit-font-smoothing:antialiased}
+
+  /* ── Header ── */
+  header{display:flex;align-items:center;gap:12px;padding:16px 24px;
+         border-bottom:1px solid var(--border);background:var(--bg2)}
+  .logo{font-family:'Syne',sans-serif;font-weight:800;font-size:17px;letter-spacing:-.3px}
+  .logo span{color:var(--primary)}
+  .badge{font-size:11px;font-weight:600;color:var(--muted);padding:3px 9px;
+         border:1px solid var(--border-strong);border-radius:999px;letter-spacing:.3px}
+  #rec{display:none;align-items:center;gap:7px;color:var(--red);font-size:13px;
+       font-weight:600;margin-left:auto}
+  #rec.on{display:inline-flex}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--red);
+       animation:pulse-dot 1.1s ease-in-out infinite}
+  @keyframes pulse-dot{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.3;transform:scale(.75)}}
+
+  /* ── Layout ── */
+  .wrap{max-width:1020px;margin:0 auto;padding:24px}
+
+  /* ── Model pickers ── */
+  .models{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:20px;
+          background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .models-title{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.7px;
+                color:var(--muted);width:100%;margin-bottom:10px}
+  .field{display:flex;flex-direction:column;gap:6px;flex:1;min-width:220px}
+  .field label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--faint)}
+  select{background:var(--bg3);color:var(--text);border:1px solid var(--border-strong);
+         border-radius:8px;padding:10px 12px;font:inherit;font-size:13px;
+         transition:.15s border-color;appearance:none;cursor:pointer;
+         background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%239A9A9A' viewBox='0 0 16 16'%3E%3Cpath d='M7.247 11.14 2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/%3E%3C/svg%3E");
+         background-repeat:no-repeat;background-position:right 12px center;padding-right:32px}
+  select:focus{outline:none;border-color:rgba(242,86,35,0.5)}
+  select:disabled{opacity:.4;cursor:not-allowed}
+  .cost-note{font-size:11px;color:var(--faint);margin-top:4px}
+
+  /* ── Controls ── */
+  .controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:16px}
+  .sim-group{display:flex;gap:10px;align-items:center;padding:10px 14px;
+             background:var(--bg2);border:1px solid var(--border);border-radius:10px}
+  .sim-group-label{font-size:11px;color:var(--faint);font-weight:600;text-transform:uppercase;
+                   letter-spacing:.5px;white-space:nowrap}
+  .sep{width:1px;height:28px;background:var(--border-strong)}
+  button{font-family:inherit;font-weight:600;cursor:pointer;border:none;border-radius:9px;
+         padding:10px 18px;color:#fff;font-size:14px;
+         transition:.15s transform,.15s opacity,.15s background}
   button:active{transform:translateY(1px)}
-  button:disabled{opacity:.45;cursor:not-allowed}
-  .btn-start{background:linear-gradient(135deg,#7c5cff,#5a8bff)}
-  .btn-sim{background:linear-gradient(135deg,#1fb8a6,#1f8fb8)}
-  .btn-stop{background:#2a3357}
-  select{background:var(--panel2);color:var(--text);border:1px solid var(--line);
-          border-radius:10px;padding:11px 12px;font:inherit}
-  .rec{display:none;align-items:center;gap:8px;color:var(--rec);font-weight:600;font-size:14px}
-  .rec.on{display:inline-flex}
-  .dot{width:11px;height:11px;border-radius:50%;background:var(--rec);animation:pulse 1.1s infinite}
-  @keyframes pulse{0%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(.8)}100%{opacity:1;transform:scale(1)}}
-  .status{font-size:13px;color:var(--muted);min-height:18px;margin-bottom:14px}
-  .chat{background:var(--panel);border:1px solid var(--line);border-radius:16px;
-        padding:18px;min-height:380px;max-height:62vh;overflow-y:auto}
-  .row{display:flex;margin:12px 0}
+  button:disabled{opacity:.4;cursor:not-allowed}
+  .btn-mic{background:var(--bg4);border:1px solid var(--border-strong);color:var(--muted)}
+  .btn-mic:not(:disabled):hover{background:var(--bg5);color:var(--text)}
+  .btn-stop{background:var(--bg4);border:1px solid var(--border-strong);color:var(--red)}
+  .btn-sim{background:var(--primary);font-weight:700}
+  .btn-sim:not(:disabled):hover{background:var(--primary-hover)}
+  select#difficulty{font-size:13px;padding:9px 32px 9px 11px}
+
+  /* ── Status bar ── */
+  .status-bar{display:flex;align-items:center;gap:10px;margin-bottom:14px;
+              padding:10px 14px;background:var(--bg2);border:1px solid var(--border);
+              border-radius:8px;min-height:40px}
+  .status-icon{width:7px;height:7px;border-radius:50%;background:var(--faint);flex-shrink:0}
+  .status-icon.active{background:var(--green);animation:pulse-dot 1.6s ease-in-out infinite}
+  .status-icon.running{background:var(--amber);animation:pulse-dot 1s ease-in-out infinite}
+  .status-icon.error{background:var(--red)}
+  #status{font-size:13px;color:var(--muted)}
+
+  /* ── Chat panel ── */
+  .chat{background:var(--bg2);border:1px solid var(--border);border-radius:14px;
+        padding:20px;min-height:360px;max-height:58vh;overflow-y:auto;
+        scrollbar-width:thin;scrollbar-color:var(--bg5) transparent}
+  .chat::-webkit-scrollbar{width:5px}
+  .chat::-webkit-scrollbar-thumb{background:var(--bg5);border-radius:3px}
+  .row{display:flex;margin:10px 0}
   .row.agent{justify-content:flex-start}
   .row.user{justify-content:flex-end}
-  .bubble{max-width:74%;padding:11px 15px;border-radius:14px;line-height:1.45;font-size:15px}
-  .agent .bubble{background:var(--panel2);border:1px solid var(--line);border-bottom-left-radius:4px}
-  .user .bubble{background:linear-gradient(135deg,#176b62,#1fb8a6);border-bottom-right-radius:4px}
-  .who{font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin-bottom:4px}
-  .empty{color:var(--muted);text-align:center;padding:60px 0;font-size:14px}
-  .models{display:flex;gap:18px;flex-wrap:wrap;margin-bottom:14px}
-  .field{display:flex;flex-direction:column;gap:5px}
-  .field label{font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted)}
-  .field select{min-width:230px}
-  .cost{display:none;background:var(--panel);border:1px solid var(--line);border-radius:14px;
-        padding:14px 16px;margin-bottom:16px;font-size:14px}
-  .cost.on{display:block}
-  .cost h3{margin:0 0 10px;font-size:13px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted)}
-  .cost .total{font-size:20px;font-weight:700;color:var(--user)}
-  .cost table{width:100%;border-collapse:collapse;margin-top:10px;font-size:13px}
-  .cost td,.cost th{text-align:left;padding:5px 8px;border-top:1px solid var(--line)}
-  .cost th{color:var(--muted);font-weight:600}
-  .cost .num{text-align:right;font-variant-numeric:tabular-nums}
+  .bubble{max-width:72%;padding:11px 15px;border-radius:14px;line-height:1.5;font-size:14px}
+  .agent .bubble{background:var(--bg3);border:1px solid var(--border);
+                 border-bottom-left-radius:4px}
+  .user .bubble{background:rgba(242,86,35,0.10);border:1px solid rgba(242,86,35,0.25);
+                border-bottom-right-radius:4px}
+  .who{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;
+       margin-bottom:5px}
+  .agent .who{color:var(--primary)}
+  .user .who{color:var(--muted)}
+  .empty{color:var(--faint);text-align:center;padding:70px 0;font-size:14px}
+  .empty .hint{font-size:12px;margin-top:8px;color:var(--faint)}
+
+  /* ── Results panel ── */
+  #results{display:none;margin-top:20px}
+  #results.on{display:block}
+  .results-header{display:flex;align-items:center;gap:10px;margin-bottom:16px}
+  .results-header h2{font-family:'Syne',sans-serif;font-size:15px;font-weight:700}
+  .results-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px}
+  .card{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .card-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;
+              color:var(--muted);margin-bottom:12px}
+  .pill-list{display:flex;flex-wrap:wrap;gap:7px}
+  .pill{font-size:12px;font-weight:500;padding:4px 10px;border-radius:999px;
+        background:rgba(242,86,35,0.08);border:1px solid rgba(242,86,35,0.2);color:var(--text)}
+  .metric-row{display:flex;justify-content:space-between;align-items:baseline;
+              padding:7px 0;border-bottom:1px solid var(--border);font-size:13px}
+  .metric-row:last-child{border:none}
+  .metric-claim{color:var(--text)}
+  .metric-val{font-weight:700;color:var(--primary);font-size:14px}
+  .star-card{background:var(--bg3);border:1px solid var(--border);border-radius:10px;
+             padding:14px;margin-top:10px;font-size:13px;line-height:1.55}
+  .star-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;
+              color:var(--primary);margin-bottom:4px}
+  .star-text{color:var(--muted)}
+  .quote-item{padding:10px 0;border-bottom:1px solid var(--border);font-size:13px;
+              color:var(--muted);line-height:1.5;font-style:italic}
+  .quote-item:last-child{border:none}
+  .quote-item::before{content:'"';color:var(--primary);font-size:18px;line-height:1;
+                      vertical-align:-3px;margin-right:4px}
+  .gaps-list{font-size:13px;color:var(--amber);line-height:1.7}
+  .gaps-list li{list-style:none;padding:3px 0}
+  .gaps-list li::before{content:'⚠ ';font-style:normal}
+  .empty-card{color:var(--faint);font-size:13px;font-style:italic}
+
+  /* ── Cost summary ── */
+  #cost{display:none;background:var(--bg2);border:1px solid var(--border);
+        border-radius:12px;padding:14px 16px;margin-top:14px}
+  #cost.on{display:block}
+  .cost-row{display:flex;align-items:center;justify-content:space-between;
+            font-size:13px;gap:8px}
+  .cost-total{font-family:'Syne',sans-serif;font-weight:700;font-size:22px;color:var(--green)}
+  .cost-breakdown{display:flex;gap:16px;flex-wrap:wrap;margin-top:10px;
+                  padding-top:10px;border-top:1px solid var(--border)}
+  .cost-item{font-size:12px;color:var(--muted)}
+  .cost-item strong{color:var(--text);font-weight:600}
+
+  @keyframes fadeSlide{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+  .fade-in{animation:fadeSlide .25s ease forwards}
 </style>
 </head>
 <body>
+
 <header>
-  <h1>🎙️ WXRK Voice — Test Console</h1>
-  <span class="tag">self-contained · no backend</span>
-  <span id="rec" class="rec"><span class="dot"></span>recording</span>
+  <div class="logo">WXRK<span>Voice</span></div>
+  <span class="badge">Interview Console</span>
+  <span id="rec"><span class="dot"></span>&nbsp;Recording</span>
 </header>
 
 <div class="wrap">
+
+  <!-- Model pickers -->
   <div class="models">
+    <div class="models-title">AI Models</div>
     <div class="field">
-      <label for="convoSel">Conversation model</label>
-      <select id="convoSel" title="Provider + model that drives the interview"></select>
+      <label for="convoSel">Conversation — drives the interview</label>
+      <select id="convoSel" title="Provider + model that plays Mira and runs the interview"></select>
+      <span class="cost-note">Cost shown per million tokens</span>
     </div>
     <div class="field">
-      <label for="extractSel">Extraction model</label>
-      <select id="extractSel" title="Provider + model that extracts the CV data"></select>
+      <label for="extractSel">Extraction — structures the CV data</label>
+      <select id="extractSel" title="Provider + model that extracts structured CV data after the session"></select>
+      <span class="cost-note">Runs once at session end</span>
     </div>
   </div>
+
+  <!-- Controls -->
   <div class="controls">
-    <button id="startBtn" class="btn-start">▶ Start (mic)</button>
+    <button id="startBtn" class="btn-mic">🎙 Start live interview</button>
     <button id="stopBtn" class="btn-stop" disabled>■ Stop</button>
-    <button id="simBtn" class="btn-sim">⚡ Simulate (no mic)</button>
-    <select id="difficulty" title="Simulation difficulty">
-      <option value="hard">hard candidate</option>
-      <option value="easy">easy candidate</option>
-    </select>
+    <div class="sep"></div>
+    <div class="sim-group">
+      <span class="sim-group-label">Simulate</span>
+      <select id="difficulty" title="How cooperative the candidate persona will be">
+        <option value="easy">Easy — forthcoming candidate</option>
+        <option value="hard" selected>Hard — guarded candidate</option>
+      </select>
+      <button id="simBtn" class="btn-sim">⚡ Run simulation</button>
+    </div>
   </div>
-  <div id="status" class="status">Ready. Start a live mic interview, or run a no-mic simulation.</div>
-  <div id="cost" class="cost">
-    <h3>Run cost</h3>
-    <div class="total" id="costTotal">$0.000000</div>
-    <table>
-      <thead><tr><th>Role</th><th>Model</th><th class="num">in</th><th class="num">out</th><th class="num">USD</th></tr></thead>
-      <tbody id="costRows"></tbody>
-    </table>
+
+  <!-- Status -->
+  <div class="status-bar">
+    <div id="statusIcon" class="status-icon"></div>
+    <div id="status">Ready. Run a simulation (no mic needed), or start a live interview.</div>
   </div>
-  <div id="chat" class="chat"><div class="empty">No conversation yet.</div></div>
+
+  <!-- Chat transcript -->
+  <div id="chat" class="chat">
+    <div class="empty">
+      No conversation yet.
+      <div class="hint">The transcript will appear here turn by turn.</div>
+    </div>
+  </div>
+
+  <!-- Extraction results (revealed after simulate / finalize) -->
+  <div id="results">
+    <div class="results-header">
+      <h2>Extraction Results</h2>
+      <span class="badge" id="resultsBadge"></span>
+    </div>
+    <div class="results-grid">
+      <div class="card">
+        <div class="card-title">Skills</div>
+        <div class="pill-list" id="rSkills"><span class="empty-card">—</span></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Metrics</div>
+        <div id="rMetrics"><span class="empty-card">—</span></div>
+      </div>
+      <div class="card" style="grid-column:1/-1">
+        <div class="card-title">STAR Stories</div>
+        <div id="rStars"><span class="empty-card">—</span></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Key Quotes</div>
+        <div id="rQuotes"><span class="empty-card">—</span></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Data Gaps</div>
+        <ul class="gaps-list" id="rGaps"><li class="empty-card" style="list-style:none;color:var(--green)">No gaps — complete data</li></ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- Cost summary -->
+  <div id="cost">
+    <div class="cost-row">
+      <span style="font-size:13px;color:var(--muted)">Total cost</span>
+      <span class="cost-total" id="costTotal">$0.0000</span>
+    </div>
+    <div class="cost-breakdown" id="costBreakdown"></div>
+  </div>
+
 </div>
 
 <script>
 const EXPERIENCE = "Senior Backend Engineer at Acme, 2021–2023. Built the payments service. Detected tech: Python, Postgres, Kafka, AWS.";
-const chat = document.getElementById('chat');
-const statusEl = document.getElementById('status');
-const recEl = document.getElementById('rec');
-const startBtn = document.getElementById('startBtn');
-const stopBtn = document.getElementById('stopBtn');
-const simBtn = document.getElementById('simBtn');
-const convoSel = document.getElementById('convoSel');
+
+const chat       = document.getElementById('chat');
+const statusEl   = document.getElementById('status');
+const statusIcon = document.getElementById('statusIcon');
+const recEl      = document.getElementById('rec');
+const startBtn   = document.getElementById('startBtn');
+const stopBtn    = document.getElementById('stopBtn');
+const simBtn     = document.getElementById('simBtn');
+const convoSel   = document.getElementById('convoSel');
 const extractSel = document.getElementById('extractSel');
-const costEl = document.getElementById('cost');
-const costTotal = document.getElementById('costTotal');
-const costRows = document.getElementById('costRows');
+const costEl     = document.getElementById('cost');
+const resultsEl  = document.getElementById('results');
 let room = null, ws = null, cleared = false;
 
-// ---- model selectors (populated from GET /llm/options, key-gated) ----------
+// ── Model selectors ──────────────────────────────────────────────────────────
 function persistKey(role){ return 'wxrk_voice_model_' + role; }
+
 function fillSelect(sel, models, role, fallbackId){
   sel.innerHTML = '';
   if(!models.length){
-    sel.innerHTML = '<option value="">— no provider key set —</option>';
+    sel.innerHTML = '<option value="">— no provider key configured —</option>';
     sel.disabled = true; return;
   }
   sel.disabled = false;
   for(const m of models){
     const opt = document.createElement('option');
     opt.value = m.id;
-    opt.dataset.provider = m.provider; opt.dataset.model = m.model;
-    opt.textContent = `${m.provider} · ${m.model}  ($${m.in}/$${m.out} per 1M)`;
+    opt.dataset.provider = m.provider;
+    opt.dataset.model = m.model;
+    opt.textContent = `${m.provider} · ${m.model}  ($${m.in}/$${m.out} per 1M tokens)`;
     sel.appendChild(opt);
   }
   const saved = sessionStorage.getItem(persistKey(role));
@@ -133,6 +284,7 @@ function fillSelect(sel, models, role, fallbackId){
   if(wanted) sel.value = wanted;
   sel.onchange = () => sessionStorage.setItem(persistKey(role), sel.value);
 }
+
 async function loadModelOptions(){
   try{
     const r = await fetch('/llm/options');
@@ -145,53 +297,126 @@ async function loadModelOptions(){
     convoSel.disabled = extractSel.disabled = true;
   }
 }
+
 function choiceFrom(sel){
   const opt = sel.options[sel.selectedIndex];
   if(!opt || !opt.value || !opt.dataset.provider) return null;
   return { provider: opt.dataset.provider, model: opt.dataset.model };
 }
+
 function modelLabel(sel){
   const opt = sel.options[sel.selectedIndex];
   return opt && opt.dataset.provider ? `${opt.dataset.provider}/${opt.dataset.model}` : 'default';
 }
-function renderCost(cost){
-  if(!cost){ costEl.classList.remove('on'); return; }
-  costTotal.textContent = '$' + Number(cost.total_usd).toFixed(6);
-  costRows.innerHTML = '';
-  for(const role of ['convo','extract']){
-    const c = cost[role]; if(!c) continue;
-    const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${role}</td><td>${c.provider}/${c.model}</td>`
-      + `<td class="num">${c.in_tokens}</td><td class="num">${c.out_tokens}</td>`
-      + `<td class="num">$${Number(c.usd).toFixed(6)}</td>`;
-    costRows.appendChild(tr);
-  }
-  costEl.classList.add('on');
+
+// ── Status helpers ───────────────────────────────────────────────────────────
+function setStatus(t, state = ''){
+  statusEl.textContent = t;
+  statusIcon.className = 'status-icon' + (state ? ' ' + state : '');
 }
 
-function setStatus(t){ statusEl.textContent = t; }
-function clearChat(){ chat.innerHTML = ''; cleared = true; }
+// ── Chat helpers ─────────────────────────────────────────────────────────────
+function clearChat(){
+  chat.innerHTML = '';
+  cleared = true;
+  resultsEl.classList.remove('on', 'fade-in');
+  costEl.classList.remove('on');
+}
+
 function addTurn(speaker, text){
   if(!cleared) clearChat();
   const who = speaker === 'user' ? 'user' : 'agent';
   const row = document.createElement('div');
-  row.className = 'row ' + who;
+  row.className = 'row ' + who + ' fade-in';
   row.innerHTML = `<div class="bubble"><div class="who">${who === 'user' ? 'Candidate' : 'Mira'}</div>${escapeHtml(text)}</div>`;
   chat.appendChild(row);
   chat.scrollTop = chat.scrollHeight;
 }
-function escapeHtml(s){ return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
+function escapeHtml(s){
+  return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// ── Cost ─────────────────────────────────────────────────────────────────────
+function renderCost(cost){
+  if(!cost){ costEl.classList.remove('on'); return; }
+  document.getElementById('costTotal').textContent = '$' + Number(cost.total_usd).toFixed(4);
+  const bd = document.getElementById('costBreakdown');
+  bd.innerHTML = '';
+  for(const role of ['convo','extract']){
+    const c = cost[role]; if(!c) continue;
+    const d = document.createElement('div');
+    d.className = 'cost-item';
+    d.innerHTML = `<strong>${role}</strong> ${c.provider}/${c.model} &nbsp;·&nbsp; ${c.in_tokens} in / ${c.out_tokens} out &nbsp;·&nbsp; $${Number(c.usd).toFixed(4)}`;
+    bd.appendChild(d);
+  }
+  costEl.classList.add('on');
+}
+
+// ── Extraction results ────────────────────────────────────────────────────────
+function renderResults(extraction, turns, cost){
+  const ex = extraction || {};
+
+  // Skills
+  const rSkills = document.getElementById('rSkills');
+  const skills = [...(ex.skills||[])];
+  rSkills.innerHTML = skills.length
+    ? skills.map(s=>`<span class="pill">${escapeHtml(s)}</span>`).join('')
+    : '<span class="empty-card">No skills extracted</span>';
+
+  // Metrics
+  const rMetrics = document.getElementById('rMetrics');
+  const metrics = ex.metrics||[];
+  rMetrics.innerHTML = metrics.length
+    ? metrics.map(m=>`<div class="metric-row"><span class="metric-claim">${escapeHtml(m.claim||'')}</span><span class="metric-val">${escapeHtml(String(m.value||''))}</span></div>`).join('')
+    : '<span class="empty-card">No quantified metrics found</span>';
+
+  // STAR stories
+  const rStars = document.getElementById('rStars');
+  const stars = ex.star_stories||[];
+  if(stars.length){
+    rStars.innerHTML = stars.map(s=>{
+      const parts = [
+        s.situation && `<div class="star-label">Situation</div><div class="star-text">${escapeHtml(s.situation)}</div>`,
+        s.task && `<div class="star-label" style="margin-top:10px">Task</div><div class="star-text">${escapeHtml(s.task)}</div>`,
+        s.action && `<div class="star-label" style="margin-top:10px">Action</div><div class="star-text">${escapeHtml(s.action)}</div>`,
+        s.result && `<div class="star-label" style="margin-top:10px">Result</div><div class="star-text">${escapeHtml(s.result)}</div>`,
+      ].filter(Boolean).join('');
+      return `<div class="star-card">${parts||'<span class="empty-card">Incomplete STAR data</span>'}</div>`;
+    }).join('');
+  } else {
+    rStars.innerHTML = '<span class="empty-card">No STAR stories extracted</span>';
+  }
+
+  // Quotes
+  const rQuotes = document.getElementById('rQuotes');
+  const quotes = ex.quotes||[];
+  rQuotes.innerHTML = quotes.length
+    ? quotes.map(q=>`<div class="quote-item">${escapeHtml(q)}</div>`).join('')
+    : '<span class="empty-card">No notable quotes</span>';
+
+  // Gaps
+  const rGaps = document.getElementById('rGaps');
+  const gaps = ex.gaps||[];
+  rGaps.innerHTML = gaps.length
+    ? gaps.map(g=>`<li>${escapeHtml(g)}</li>`).join('')
+    : '<li class="empty-card" style="list-style:none;color:var(--green)">No gaps — complete data</li>';
+
+  // Badge
+  const sk = skills.length, mt = metrics.length, st = stars.length;
+  document.getElementById('resultsBadge').textContent = `${sk} skill${sk!==1?'s':''} · ${mt} metric${mt!==1?'s':''} · ${st} STAR stor${st!==1?'ies':'y'}`;
+
+  resultsEl.classList.add('on', 'fade-in');
+}
+
+// ── Session management ────────────────────────────────────────────────────────
 async function createSession(){
   const body = { experience_id:'exp_test', candidate_name:'Sara', experience_context: EXPERIENCE };
   const convo = choiceFrom(convoSel), extract = choiceFrom(extractSel);
   if(convo) body.convo = convo;
   if(extract) body.extract = extract;
-  const r = await fetch('/sessions', {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify(body)
-  });
-  if(!r.ok) throw new Error('create session failed: ' + r.status);
+  const r = await fetch('/sessions', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+  if(!r.ok) throw new Error('session create failed: ' + r.status);
   return r.json();
 }
 
@@ -201,34 +426,33 @@ function openStream(sessionId){
   ws.onmessage = ev => {
     const m = JSON.parse(ev.data);
     if(m.type === 'turn') addTurn(m.speaker, m.text);
-    else if(m.type === 'end') setStatus('Session ended.');
+    else if(m.type === 'end') setStatus('Session ended.', '');
   };
-  ws.onerror = () => setStatus('Transcript stream error.');
+  ws.onerror = () => setStatus('Transcript stream error.', 'error');
 }
 
+// ── Button handlers ───────────────────────────────────────────────────────────
 startBtn.onclick = async () => {
   startBtn.disabled = true; simBtn.disabled = true;
-  clearChat(); renderCost(null);
+  clearChat();
   const usingModels = `convo ${modelLabel(convoSel)} · extract ${modelLabel(extractSel)}`;
-  setStatus('Creating session… (' + usingModels + ')');
+  setStatus('Creating session…', 'running');
   try{
     const s = await createSession();
     openStream(s.session_id);
-    setStatus('Connecting microphone…');
+    setStatus('Connecting microphone…', 'running');
     if(!s.ws_url || s.join_token.startsWith('dev-token')){
       recEl.classList.add('on'); stopBtn.disabled = false;
-      setStatus('Session live with ' + usingModels + ' (LiveKit creds not configured — mic '
-        + 'transport disabled in dev). Transcript stream is open; run a real LiveKit worker '
-        + 'to converse, or use Simulate. Cost is reported at finalize.');
+      setStatus('Session active — LiveKit not configured, mic transport disabled. Use Simulate for a full run.', 'active');
       return;
     }
     room = new LivekitClient.Room({ adaptiveStream:true });
     await room.connect(s.ws_url, s.join_token);
     await room.localParticipant.setMicrophoneEnabled(true);
     recEl.classList.add('on'); stopBtn.disabled = false;
-    setStatus('Live — speak naturally. Mira will respond. (' + usingModels + ')');
+    setStatus('Live — speak naturally. Mira will respond. (' + usingModels + ')', 'active');
   }catch(e){
-    setStatus('Could not start: ' + e.message);
+    setStatus('Could not start: ' + e.message, 'error');
     startBtn.disabled = false; simBtn.disabled = false;
   }
 };
@@ -238,42 +462,39 @@ stopBtn.onclick = async () => {
   stopBtn.disabled = true; startBtn.disabled = false; simBtn.disabled = false;
   if(room){ await room.disconnect(); room = null; }
   if(ws){ ws.close(); ws = null; }
-  setStatus('Stopped.');
+  setStatus('Session stopped.', '');
 };
 
 simBtn.onclick = async () => {
   startBtn.disabled = true; simBtn.disabled = true;
-  clearChat(); renderCost(null);
+  clearChat();
   const difficulty = document.getElementById('difficulty').value;
   const body = { experience_context: EXPERIENCE, difficulty, max_turns:16 };
   const convo = choiceFrom(convoSel), extract = choiceFrom(extractSel);
   if(convo) body.convo = convo;
   if(extract) body.extract = extract;
-  setStatus(`Running ${difficulty} simulation (no mic) — convo ${modelLabel(convoSel)} · extract ${modelLabel(extractSel)}…`);
+  setStatus(`Running ${difficulty} simulation — ${modelLabel(convoSel)} conversation, ${modelLabel(extractSel)} extraction…`, 'running');
   try{
-    const r = await fetch('/simulate', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify(body)
-    });
+    const r = await fetch('/simulate', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
     if(!r.ok) throw new Error('simulate failed: ' + r.status);
     const data = await r.json();
-    for(const t of data.transcript){ addTurn(t.speaker, t.text); await sleep(140); }
+    for(const t of data.transcript){ addTurn(t.speaker, t.text); await sleep(130); }
     renderCost(data.cost);
-    const m = (data.extraction.metrics||[]).length, sk = (data.extraction.skills||[]).length;
-    const ran = data.cost ? `convo ${data.cost.convo.provider}/${data.cost.convo.model} · extract ${data.cost.extract.provider}/${data.cost.extract.model}` : '';
-    const usd = data.cost ? ` · $${Number(data.cost.total_usd).toFixed(6)}` : '';
-    setStatus(`Done — ${data.transcript.length} turns, ${sk} skills, ${m} metrics${usd}. Ran ${ran}. Full JSON in console.`);
+    renderResults(data.extraction, data.transcript, data.cost);
+    const sk = (data.extraction?.skills||[]).length;
+    const mt = (data.extraction?.metrics||[]).length;
+    setStatus(`Done — ${data.transcript.length} turns · ${sk} skills · ${mt} metrics · $${Number(data.cost?.total_usd||0).toFixed(4)}`, '');
     console.log('extraction', data.extraction);
     console.log('ground_truth', data.ground_truth);
     console.log('cost', data.cost);
   }catch(e){
-    setStatus('Simulation error: ' + e.message);
+    setStatus('Simulation error: ' + e.message, 'error');
   }finally{
     startBtn.disabled = false; simBtn.disabled = false;
   }
 };
-const sleep = ms => new Promise(r => setTimeout(r, ms));
 
+const sleep = ms => new Promise(r => setTimeout(r, ms));
 loadModelOptions();
 </script>
 </body>

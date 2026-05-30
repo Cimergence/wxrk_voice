@@ -52,7 +52,8 @@ def _coerce(data: dict) -> dict:
     """Fill any missing required keys so partial LLM output still validates."""
     defaults = {
         "role_summary": None, "scope": None, "skills": [], "metrics": [],
-        "achievements": [], "star_stories": [], "quotes": [], "gaps": [],
+        "achievements": [], "star_stories": [], "quotes": [],
+        "emotional_context": None, "gaps": [],
     }
     for k in REQUIRED_KEYS:
         data.setdefault(k, defaults[k])
