@@ -43,6 +43,19 @@
   .user .bubble{background:linear-gradient(135deg,#176b62,#1fb8a6);border-bottom-right-radius:4px}
   .who{font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin-bottom:4px}
   .empty{color:var(--muted);text-align:center;padding:60px 0;font-size:14px}
+  .models{display:flex;gap:18px;flex-wrap:wrap;margin-bottom:14px}
+  .field{display:flex;flex-direction:column;gap:5px}
+  .field label{font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted)}
+  .field select{min-width:230px}
+  .cost{display:none;background:var(--panel);border:1px solid var(--line);border-radius:14px;
+        padding:14px 16px;margin-bottom:16px;font-size:14px}
+  .cost.on{display:block}
+  .cost h3{margin:0 0 10px;font-size:13px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted)}
+  .cost .total{font-size:20px;font-weight:700;color:var(--user)}
+  .cost table{width:100%;border-collapse:collapse;margin-top:10px;font-size:13px}
+  .cost td,.cost th{text-align:left;padding:5px 8px;border-top:1px solid var(--line)}
+  .cost th{color:var(--muted);font-weight:600}
+  .cost .num{text-align:right;font-variant-numeric:tabular-nums}
 </style>
 </head>
 <body>
@@ -53,6 +66,16 @@
 </header>
 
 <div class="wrap">
+  <div class="models">
+    <div class="field">
+      <label for="convoSel">Conversation model</label>
+      <select id="convoSel" title="Provider + model that drives the interview"></select>
+    </div>
+    <div class="field">
+      <label for="extractSel">Extraction model</label>
+      <select id="extractSel" title="Provider + model that extracts the CV data"></select>
+    </div>
+  </div>
   <div class="controls">
     <button id="startBtn" class="btn-start">▶ Start (mic)</button>
     <button id="stopBtn" class="btn-stop" disabled>■ Stop</button>
@@ -63,6 +86,14 @@
     </select>
   </div>
   <div id="status" class="status">Ready. Start a live mic interview, or run a no-mic simulation.</div>
+  <div id="cost" class="cost">
+    <h3>Run cost</h3>
+    <div class="total" id="costTotal">$0.000000</div>
+    <table>
+      <thead><tr><th>Role</th><th>Model</th><th class="num">in</th><th class="num">out</th><th class="num">USD</th></tr></thead>
+      <tbody id="costRows"></tbody>
+    </table>
+  </div>
   <div id="chat" class="chat"><div class="empty">No conversation yet.</div></div>
 </div>
 
@@ -74,7 +105,69 @@ const recEl = document.getElementById('rec');
 const startBtn = document.getElementById('startBtn');
 const stopBtn = document.getElementById('stopBtn');
 const simBtn = document.getElementById('simBtn');
+const convoSel = document.getElementById('convoSel');
+const extractSel = document.getElementById('extractSel');
+const costEl = document.getElementById('cost');
+const costTotal = document.getElementById('costTotal');
+const costRows = document.getElementById('costRows');
 let room = null, ws = null, cleared = false;
+
+// ---- model selectors (populated from GET /llm/options, key-gated) ----------
+function persistKey(role){ return 'wxrk_voice_model_' + role; }
+function fillSelect(sel, models, role, fallbackId){
+  sel.innerHTML = '';
+  if(!models.length){
+    sel.innerHTML = '<option value="">— no provider key set —</option>';
+    sel.disabled = true; return;
+  }
+  sel.disabled = false;
+  for(const m of models){
+    const opt = document.createElement('option');
+    opt.value = m.id;
+    opt.dataset.provider = m.provider; opt.dataset.model = m.model;
+    opt.textContent = `${m.provider} · ${m.model}  ($${m.in}/$${m.out} per 1M)`;
+    sel.appendChild(opt);
+  }
+  const saved = sessionStorage.getItem(persistKey(role));
+  const wanted = [saved, fallbackId].find(id => id && models.some(m => m.id === id));
+  if(wanted) sel.value = wanted;
+  sel.onchange = () => sessionStorage.setItem(persistKey(role), sel.value);
+}
+async function loadModelOptions(){
+  try{
+    const r = await fetch('/llm/options');
+    if(!r.ok) throw new Error('options ' + r.status);
+    const o = await r.json();
+    fillSelect(convoSel, o.convo, 'convo', o.defaults?.convo?.id);
+    fillSelect(extractSel, o.extract, 'extract', o.defaults?.extract?.id);
+  }catch(e){
+    convoSel.innerHTML = extractSel.innerHTML = '<option value="">— options unavailable —</option>';
+    convoSel.disabled = extractSel.disabled = true;
+  }
+}
+function choiceFrom(sel){
+  const opt = sel.options[sel.selectedIndex];
+  if(!opt || !opt.value || !opt.dataset.provider) return null;
+  return { provider: opt.dataset.provider, model: opt.dataset.model };
+}
+function modelLabel(sel){
+  const opt = sel.options[sel.selectedIndex];
+  return opt && opt.dataset.provider ? `${opt.dataset.provider}/${opt.dataset.model}` : 'default';
+}
+function renderCost(cost){
+  if(!cost){ costEl.classList.remove('on'); return; }
+  costTotal.textContent = '$' + Number(cost.total_usd).toFixed(6);
+  costRows.innerHTML = '';
+  for(const role of ['convo','extract']){
+    const c = cost[role]; if(!c) continue;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${role}</td><td>${c.provider}/${c.model}</td>`
+      + `<td class="num">${c.in_tokens}</td><td class="num">${c.out_tokens}</td>`
+      + `<td class="num">$${Number(c.usd).toFixed(6)}</td>`;
+    costRows.appendChild(tr);
+  }
+  costEl.classList.add('on');
+}
 
 function setStatus(t){ statusEl.textContent = t; }
 function clearChat(){ chat.innerHTML = ''; cleared = true; }
@@ -90,9 +183,13 @@ function addTurn(speaker, text){
 function escapeHtml(s){ return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
 async function createSession(){
+  const body = { experience_id:'exp_test', candidate_name:'Sara', experience_context: EXPERIENCE };
+  const convo = choiceFrom(convoSel), extract = choiceFrom(extractSel);
+  if(convo) body.convo = convo;
+  if(extract) body.extract = extract;
   const r = await fetch('/sessions', {
     method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ experience_id:'exp_test', candidate_name:'Sara', experience_context: EXPERIENCE })
+    body: JSON.stringify(body)
   });
   if(!r.ok) throw new Error('create session failed: ' + r.status);
   return r.json();
@@ -111,22 +208,25 @@ function openStream(sessionId){
 
 startBtn.onclick = async () => {
   startBtn.disabled = true; simBtn.disabled = true;
-  clearChat(); setStatus('Creating session…');
+  clearChat(); renderCost(null);
+  const usingModels = `convo ${modelLabel(convoSel)} · extract ${modelLabel(extractSel)}`;
+  setStatus('Creating session… (' + usingModels + ')');
   try{
     const s = await createSession();
     openStream(s.session_id);
     setStatus('Connecting microphone…');
     if(!s.ws_url || s.join_token.startsWith('dev-token')){
       recEl.classList.add('on'); stopBtn.disabled = false;
-      setStatus('Session live (LiveKit creds not configured — mic transport disabled in dev). '
-        + 'Transcript stream is open; run a real LiveKit worker to converse, or use Simulate.');
+      setStatus('Session live with ' + usingModels + ' (LiveKit creds not configured — mic '
+        + 'transport disabled in dev). Transcript stream is open; run a real LiveKit worker '
+        + 'to converse, or use Simulate. Cost is reported at finalize.');
       return;
     }
     room = new LivekitClient.Room({ adaptiveStream:true });
     await room.connect(s.ws_url, s.join_token);
     await room.localParticipant.setMicrophoneEnabled(true);
     recEl.classList.add('on'); stopBtn.disabled = false;
-    setStatus('Live — speak naturally. Mira will respond.');
+    setStatus('Live — speak naturally. Mira will respond. (' + usingModels + ')');
   }catch(e){
     setStatus('Could not start: ' + e.message);
     startBtn.disabled = false; simBtn.disabled = false;
@@ -143,21 +243,29 @@ stopBtn.onclick = async () => {
 
 simBtn.onclick = async () => {
   startBtn.disabled = true; simBtn.disabled = true;
-  clearChat();
+  clearChat(); renderCost(null);
   const difficulty = document.getElementById('difficulty').value;
-  setStatus(`Running ${difficulty} simulation (no mic)…`);
+  const body = { experience_context: EXPERIENCE, difficulty, max_turns:16 };
+  const convo = choiceFrom(convoSel), extract = choiceFrom(extractSel);
+  if(convo) body.convo = convo;
+  if(extract) body.extract = extract;
+  setStatus(`Running ${difficulty} simulation (no mic) — convo ${modelLabel(convoSel)} · extract ${modelLabel(extractSel)}…`);
   try{
     const r = await fetch('/simulate', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ experience_context: EXPERIENCE, difficulty, max_turns:16 })
+      body: JSON.stringify(body)
     });
     if(!r.ok) throw new Error('simulate failed: ' + r.status);
     const data = await r.json();
     for(const t of data.transcript){ addTurn(t.speaker, t.text); await sleep(140); }
+    renderCost(data.cost);
     const m = (data.extraction.metrics||[]).length, sk = (data.extraction.skills||[]).length;
-    setStatus(`Done — ${data.transcript.length} turns, extracted ${sk} skills and ${m} metrics. See console for full JSON.`);
+    const ran = data.cost ? `convo ${data.cost.convo.provider}/${data.cost.convo.model} · extract ${data.cost.extract.provider}/${data.cost.extract.model}` : '';
+    const usd = data.cost ? ` · $${Number(data.cost.total_usd).toFixed(6)}` : '';
+    setStatus(`Done — ${data.transcript.length} turns, ${sk} skills, ${m} metrics${usd}. Ran ${ran}. Full JSON in console.`);
     console.log('extraction', data.extraction);
     console.log('ground_truth', data.ground_truth);
+    console.log('cost', data.cost);
   }catch(e){
     setStatus('Simulation error: ' + e.message);
   }finally{
@@ -165,6 +273,8 @@ simBtn.onclick = async () => {
   }
 };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+loadModelOptions();
 </script>
 </body>
 </html>
