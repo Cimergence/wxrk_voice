@@ -3,19 +3,19 @@
 ## Purpose
 A self-contained, dockerized service that runs a **real-time voice interview**
 to deep-dive ONE work experience and returns **structured CV data**
-(skills, numbers, achievements, STAR stories). The existing backend talks to it
+(skills, numbers, achievements, STAR stories). `wxrk_backend` talks to it
 only over HTTP/WebSocket, so the voice tech can be swapped without touching
 backend code.
 
 ## Hard rules (non-negotiable)
-1. **Lives in its own folder/repo** (`voice-capture-agent/`). No imports from the
-   main backend. No backend file is modified by this work.
+1. **Lives in its own folder/repo** (`wxrk_voice/`). No imports from
+   wxrk_backend. No wxrk_backend or wxrk_frontend file is modified by this work.
 2. **All providers are config-driven** behind interfaces: `LLMProvider`,
    `STTProvider`, `TTSProvider`. Switching provider = changing an env var, nothing
    else. Ship at least two LLM implementations (hosted default + local stub) to
    prove the seam works.
-3. **One experience per session.** The experience context is passed in at session
-   creation, not hardcoded.
+3. **One experience per session.** `experience_context` is passed in by `wxrk_backend`
+   at session creation (the service never reads the backend DB). Not hardcoded.
 4. **Every turn is captured as text** (speaker, text, timestamp) and exposed so a
    chat UI can render the conversation live.
 5. **Serves its own `/test` page** — a minimal chat interface that connects mic,
@@ -28,6 +28,8 @@ backend code.
   barge-in) using the live interview prompt from `PROMPT.md`.
 - `providers/` — `llm.py`, `stt.py`, `tts.py`, each an interface + 2 impls.
 - `extraction/` — post-call transcript → JSON using the extraction prompt.
+- `simulate/` — text-mode harness: interviewer-LLM ↔ candidate-LLM loop (no
+  audio) + persona generator, for fast/cheap end-to-end testing (`POST /simulate`).
 - `static/test.html` — self-contained chat test page served at `/test`.
 - `Dockerfile`, `docker-compose.yml`, `.env.example`, `README.md`.
 
@@ -44,12 +46,14 @@ backend code.
 - `POST /sessions` accepts an experience context and starts a scoped interview.
 - `GET /sessions/{id}/transcript` returns ordered turns with speaker + text.
 - `POST /sessions/{id}/finalize` returns valid JSON matching the extraction schema.
+- `POST /simulate` runs an LLM-impersonated candidate against the interviewer in
+  text mode and returns a full transcript plus valid extraction JSON, no audio used.
 - Changing `LLM_PROVIDER` in env switches the model with no code edit and the
   service still boots and runs the conversation.
-- `git diff --name-only` shows only files under `voice-capture-agent/`.
+- `git diff --name-only` shows only files under `wxrk_voice/`.
 
 ## Out of scope (separate, later task)
-- The frontend `/voice-capture-test` page in the main app. It will just embed the
+- The `/voice-capture-test` page in `wxrk_frontend`. It will just embed the
   same endpoints; the service's own `/test` page proves the flow first.
 
 ## API contract

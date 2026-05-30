@@ -1,6 +1,6 @@
 # API Contract — Voice Capture Agent
 
-Base URL: `http://voice-capture-agent:8080` (inside Docker network).
+Base URL: `http://wxrk_voice:8080` (inside Docker network).
 Auth: shared bearer token via `SERVICE_API_KEY` header on every call.
 
 ## POST /sessions
@@ -64,3 +64,34 @@ Ends the session and returns structured CV data (extraction schema).
 ## GET /test
 Self-contained chat test page. Creates a throwaway session, joins the room with
 the browser mic, and renders the live transcript. No backend involvement.
+
+## Where experience_context comes from
+`wxrk_backend` owns the technical review. It assembles `experience_context` for the
+chosen experience and passes it in the `POST /sessions` body. The voice service
+never reads the backend DB or schema — it only receives the context. (To auto-test
+with a *real* stored user later, add a small read endpoint in `wxrk_backend`; that's
+a separate backend task and out of scope for this service.)
+
+## POST /simulate  (testing only — no mic, no audio)
+Runs an LLM-impersonated candidate against the interviewer in text mode, then
+extracts. Cheap and fast; ideal for CI and tuning the prompt. `difficulty` swaps
+the candidate persona: `easy` = forthcoming (smoke test the happy path),
+`hard` = guarded, reveals specifics only when probed (tests whether Mira digs).
+```json
+// request — give EITHER a ready persona OR an experience_context to auto-build one
+{
+  "experience_context": "Senior Backend Engineer at Acme...",  // optional
+  "persona": { "...persona JSON..." },                          // optional
+  "difficulty": "hard",                                          // "easy" | "hard" (default "hard")
+  "max_turns": 16
+}
+// response
+{
+  "transcript": [
+    {"speaker":"agent","text":"...","ts":0},
+    {"speaker":"user","text":"...","ts":1}
+  ],
+  "extraction": { "...extraction schema JSON..." },
+  "ground_truth": { "...if a persona was generated, for scoring..." }
+}
+```
