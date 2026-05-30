@@ -18,7 +18,11 @@ backend code.
    at session creation (the service never reads the backend DB). Not hardcoded.
 4. **Every turn is captured as text** (speaker, text, timestamp) and exposed so a
    chat UI can render the conversation live.
-5. **Serves its own `/test` page** — a minimal chat interface that connects mic,
+5. **Agent must actually join the test room.** Either run the worker with automatic
+   dispatch (no `agent_name` set) so it auto-joins any new room, OR have `POST /sessions`
+   explicitly dispatch the agent to the room it creates. Never leave a room that a
+   participant joins with no agent assigned.
+6. **Serves its own `/test` page** — a minimal chat interface that connects mic,
    shows the live transcript, and needs zero backend changes to run.
 
 ## Components
@@ -28,6 +32,9 @@ backend code.
   barge-in) using the live interview prompt from `PROMPT.md`.
 - `providers/` — `llm.py`, `stt.py`, `tts.py`, each an interface + 2 impls.
 - `extraction/` — post-call transcript → JSON using the extraction prompt.
+- `observability/` — per-call cost tracking: read MODELS.md prices, multiply by
+  actual input/output tokens from each provider response, store per-turn and
+  per-session USD totals, expose them via API and show them on the test page.
 - `simulate/` — text-mode harness: interviewer-LLM ↔ candidate-LLM loop (no
   audio) + persona generator, for fast/cheap end-to-end testing (`POST /simulate`).
 - `static/test.html` — self-contained chat test page served at `/test`.
@@ -35,9 +42,16 @@ backend code.
 
 ## Default config
 - Transport: LiveKit Cloud (WebRTC, barge-in).
-- STT: Deepgram Nova-3. LLM: Gemini 2.5 Flash Lite. TTS: Deepgram Aura.
-- Swap targets documented in `.env.example`: local `faster-whisper`,
-  Ollama small model, Piper TTS.
+- STT: Deepgram Nova-3. TTS: Deepgram Aura.
+- **Two independent LLM settings**, both choosable from the SAME three providers (no Gemini, no Groq): **OpenAI, xAI, Anthropic**.
+  The model list + prices live in `operation_files/MODELS.md` (single source of truth).
+  - **Conversation role** (latency-critical): `CONVO_PROVIDER` + model resolution.
+  - **Extraction role** (JSON quality): `EXTRACT_PROVIDER` + model resolution.
+- Model resolution per role: `*_MODEL` (role) → `<PROVIDER>_MODEL` → `<PROVIDER>_MODEL_DEFAULT`
+  (see MODELS.md). Switching is env-only. Each provider reads its own key
+  (OPENAI_API_KEY, XAI_API_KEY, ANTHROPIC_API_KEY); a provider is selectable only
+  if its key is present.
+- Optional later swap targets: local `faster-whisper` (STT), Piper (TTS).
 
 ## Success = these are all true
 - `docker compose up` starts the service; `GET /health` returns 200.
@@ -46,10 +60,15 @@ backend code.
 - `POST /sessions` accepts an experience context and starts a scoped interview.
 - `GET /sessions/{id}/transcript` returns ordered turns with speaker + text.
 - `POST /sessions/{id}/finalize` returns valid JSON matching the extraction schema.
+- Every session and every /simulate run reports a USD cost breakdown (per role:
+  conversation vs extraction, plus tokens used and the model that ran). Costs use
+  the prices in MODELS.md and the real token counts from provider responses.
 - `POST /simulate` runs an LLM-impersonated candidate against the interviewer in
   text mode and returns a full transcript plus valid extraction JSON, no audio used.
-- Changing `LLM_PROVIDER` in env switches the model with no code edit and the
-  service still boots and runs the conversation.
+- Setting `CONVO_PROVIDER`/`EXTRACT_PROVIDER` (and the model vars) to any
+  key-present provider switches each role with no code edit; the service still boots.
+- The `/test` page lets you pick the conversation model and the extraction model
+  before running, so model combos can be A/B tested without a rebuild.
 - `git diff --name-only` shows only files under `wxrk_voice/`.
 
 ## Out of scope (separate, later task)

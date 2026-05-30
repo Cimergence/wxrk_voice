@@ -4,14 +4,18 @@ Base URL: `http://wxrk_voice:8080` (inside Docker network).
 Auth: shared bearer token via `SERVICE_API_KEY` header on every call.
 
 ## POST /sessions
-Start a scoped interview for one experience.
+Start a scoped interview for one experience. Creates the LiveKit room, mints the
+browser join token, and ensures the agent is dispatched to that room (automatic
+dispatch with no agent_name, or an explicit dispatch call here).
 ```json
 // request
 {
   "experience_id": "exp_123",
   "candidate_name": "Sara",
   "experience_context": "Senior Backend Engineer at Acme, 2021–2023. Built the
-    payments service. Detected tech: Python, Postgres, Kafka, AWS."
+    payments service. Detected tech: Python, Postgres, Kafka, AWS.",
+  "convo": {"provider":"xai","model":"grok-4.3"},      // optional; defaults to CONVO_PROVIDER/env resolution
+  "extract": {"provider":"openai","model":"gpt-5.4-mini"}  // optional; defaults to EXTRACT_PROVIDER/env resolution
 }
 // response
 {
@@ -54,12 +58,25 @@ Ends the session and returns structured CV data (extraction schema).
     "star_stories": [{"situation":"","task":"","action":"","result":""}],
     "quotes": ["..."],
     "gaps": ["..."]
+  },
+  "cost": {
+    "total_usd": 0.0123,
+    "convo": {"model":"xai-grok-4.3","in_tokens":4200,"out_tokens":1100,"usd":0.0081},
+    "extract": {"model":"openai-gpt-5.4-mini","in_tokens":3000,"out_tokens":600,"usd":0.0042}
   }
 }
 ```
 
+## GET /sessions/{id}/cost
+Running USD cost for a session (live or final), broken down by role and model.
+```json
+{ "session_id":"sess_abc", "total_usd":0.0123,
+  "convo":{"model":"xai-grok-4.3","in_tokens":4200,"out_tokens":1100,"usd":0.0081},
+  "extract":{"model":"openai-gpt-5.4-mini","in_tokens":3000,"out_tokens":600,"usd":0.0042} }
+```
+
 ## GET /health
-`200 {"status":"ok","providers":{"llm":"gemini","stt":"deepgram","tts":"deepgram"}}`
+`200 {"status":"ok","providers":{"convo":"xai/grok-4.3","extract":"openai/gpt-5.4-nano","stt":"deepgram","tts":"deepgram"}}`
 
 ## GET /test
 Self-contained chat test page. Creates a throwaway session, joins the room with
@@ -83,6 +100,8 @@ the candidate persona: `easy` = forthcoming (smoke test the happy path),
   "experience_context": "Senior Backend Engineer at Acme...",  // optional
   "persona": { "...persona JSON..." },                          // optional
   "difficulty": "hard",                                          // "easy" | "hard" (default "hard")
+  "convo": {"provider":"xai","model":"grok-4.3"},                // optional override
+  "extract": {"provider":"openai","model":"gpt-5.4-mini"},       // optional override
   "max_turns": 16
 }
 // response
@@ -92,6 +111,7 @@ the candidate persona: `easy` = forthcoming (smoke test the happy path),
     {"speaker":"user","text":"...","ts":1}
   ],
   "extraction": { "...extraction schema JSON..." },
-  "ground_truth": { "...if a persona was generated, for scoring..." }
+  "ground_truth": { "...if a persona was generated, for scoring..." },
+  "cost": { "total_usd": 0.004, "convo": {"...":"..."}, "extract": {"...":"..."} }
 }
 ```
