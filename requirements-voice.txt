@@ -1,0 +1,10 @@
+# Heavy, optional deps for the live audio pipeline + hosted providers.
+# Installed in the Docker image. NOT required for `pytest` (stub providers cover CI).
+# Every import of these is lazy, so the API still boots if they are absent.
+livekit-agents==0.12.11
+livekit-plugins-deepgram==0.6.19
+livekit-plugins-google==0.11.1
+livekit-plugins-silero==0.7.5
+livekit-api==0.8.2
+google-genai==0.3.0
+deepgram-sdk==3.8.0

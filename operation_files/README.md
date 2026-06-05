@@ -1,6 +1,6 @@
-# voice-capture-agent (planning folder)
+# wxrk_voice (operation_files)
 
-Drop this folder at the **root of your repo**. It is the spec + prompts +
+This is the spec + prompts +
 build goal for a standalone, swappable voice interview service. The service it
 describes deep-dives ONE work experience by voice and returns structured CV
 data for the WXRK builder.
@@ -17,9 +17,9 @@ data for the WXRK builder.
 3. Paste the `/goal` block into Claude Code. It builds the service into this
    same folder, in checkpointed phases.
 4. Test instantly at `http://localhost:8080/test` — no backend changes needed.
-5. Later, add the frontend `/voice-capture-test` page that embeds the same
+5. Later, add the `wxrk_frontend` `/voice-capture-test` page that embeds the same
    endpoints (separate, small task).
 
 ## The principle
-The backend never knows which model, STT, or TTS is running. It only knows the
+wxrk_backend never knows which model, STT, or TTS is running. It only knows the
 contract in `API_CONTRACT.md`. Swap tech by changing one env var.

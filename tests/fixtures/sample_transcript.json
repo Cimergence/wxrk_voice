@@ -1,0 +1,9 @@
+[
+  {"speaker": "agent", "text": "Walk me through what you actually did day to day there.", "ts": 0},
+  {"speaker": "user", "text": "I owned the payments pipeline at Acme, mostly Python and Postgres with Kafka on AWS.", "ts": 1},
+  {"speaker": "agent", "text": "Roughly how many users did it serve?", "ts": 2},
+  {"speaker": "user", "text": "About 2 million users. We cut latency by around 40% after I re-architected the retries.", "ts": 3},
+  {"speaker": "agent", "text": "And what size team were you on?", "ts": 4},
+  {"speaker": "user", "text": "A team of 8 engineers. I led the migration that reduced outages a lot.", "ts": 5},
+  {"speaker": "agent", "text": "So to recap, you owned real work and moved real numbers — I'm all set.", "ts": 6}
+]

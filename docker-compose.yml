@@ -1,0 +1,31 @@
+# Standalone compose for running wxrk_voice in isolation.
+#   docker compose -f wxrk_voice/docker-compose.yml up --build
+# Then: curl localhost:8080/health  ->  200
+#
+# `.env` is optional — without it the service boots on offline stub providers.
+services:
+  voice:
+    build:
+      context: .
+      target: base
+    image: wxrk_voice
+    env_file:
+      - path: .env
+        required: false
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+
+  # Live audio worker (STT->LLM->TTS over LiveKit). Opt-in: needs LiveKit +
+  # provider creds in .env. Start with:  docker compose --profile live up
+  voice_worker:
+    build:
+      context: .
+      target: voice
+    env_file:
+      - path: .env
+        required: false
+    depends_on:
+      - voice
+    profiles: ["live"]
+    restart: unless-stopped
